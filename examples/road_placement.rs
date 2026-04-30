@@ -18,12 +18,16 @@
 //! | Zoom | Scroll wheel |
 
 use bevy::{
+    asset::RenderAssetUsages,
     input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
+    mesh::Indices,
     prelude::*,
+    render::render_resource::PrimitiveTopology,
     window::{PrimaryWindow, WindowResolution},
 };
 use bevy_bezier_splines::{
-    BezierPath, BezierPathNode, BezierSplinesPlugin, GizmoDrawMode, NodeType,
+    math::sample_cubic_bezier, BezierPath, BezierPathNode, BezierSplinesPlugin, GizmoDrawMode,
+    NodeType,
 };
 
 fn main() {
@@ -47,10 +51,12 @@ fn main() {
                 pick_handle,
                 drag_handle,
                 release_handle,
+                keyboard_controls,
+                update_status_text,
+                update_road_mesh,
             )
                 .chain(),
         )
-        .add_systems(Update, (keyboard_controls, update_status_text))
         .run();
 }
 
@@ -61,6 +67,12 @@ fn main() {
 /// Marks the status-text UI entity.
 #[derive(Component)]
 struct StatusText;
+
+/// Marker component for the road mesh.
+#[derive(Component)]
+struct RoadMesh {
+    road_width: f32,
+}
 
 /// Which part of a node is being interacted with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -184,15 +196,13 @@ fn spawn_default_road(mut commands: Commands) {
     );
 }
 
-/// Spawn a [`BezierPath`] entity with child [`BezierPathNode`] entities.
-/// `nodes` is `(center, incoming_offset, outgoing_offset)`.
 fn spawn_road(commands: &mut Commands, closed: bool, nodes: &[(Vec3, Vec3, Vec3)]) {
     let path_entity = commands
         .spawn((
             BezierPath {
                 subdivisions: 30,
                 closed,
-                gizmo_draw_mode: GizmoDrawMode::Complete,
+                gizmo_draw_mode: GizmoDrawMode::WaypointOnly,
             },
             Transform::default(),
             Visibility::default(),
@@ -213,6 +223,13 @@ fn spawn_road(commands: &mut Commands, closed: bool, nodes: &[(Vec3, Vec3, Vec3)
             .id();
         commands.entity(path_entity).add_child(node_entity);
     }
+
+    commands.spawn((
+        RoadMesh { road_width: 0.5 },
+        Transform::default(),
+        Visibility::default(),
+        ChildOf(path_entity),
+    ));
 }
 
 fn status_text_content(closed: bool) -> String {
@@ -223,6 +240,156 @@ fn status_text_content(closed: bool) -> String {
          [A] Add  [R] Remove last  [C] Toggle closed ({})  [Space] Reset",
         if closed { "ON" } else { "OFF" }
     )
+}
+
+fn build_road_mesh(
+    node_data: &[(Vec3, Vec3, Vec3)],
+    closed: bool,
+    subdivisions: u32,
+    road_width: f32,
+) -> Mesh {
+    let segment_count = if closed {
+        node_data.len()
+    } else {
+        node_data.len() - 1
+    };
+
+    let mut positions: Vec<[f32; 3]> = Vec::new();
+    let mut normals: Vec<[f32; 3]> = Vec::new();
+    let mut uvs: Vec<[f32; 2]> = Vec::new();
+    let mut indices: Vec<u32> = Vec::new();
+
+    let mut accumulated_length = 0.0_f32;
+
+    for i in 0..segment_count {
+        let next = (i + 1) % node_data.len();
+        let (p0, _in0, out0) = node_data[i];
+        let (p3, in3, _out3) = node_data[next];
+        let p1 = p0 + out0;
+        let p2 = p3 + in3;
+
+        let points: Vec<Vec3> = sample_cubic_bezier(p0, p1, p2, p3, subdivisions).collect();
+
+        for (j, point) in points.iter().enumerate() {
+            let tangent = if j == 0 {
+                if points.len() > 1 {
+                    (points[1] - points[0]).normalize_or_zero()
+                } else {
+                    Vec3::Z
+                }
+            } else if j == points.len() - 1 {
+                (points[j] - points[j - 1]).normalize_or_zero()
+            } else {
+                (points[j + 1] - points[j - 1]).normalize_or_zero()
+            };
+
+            let right = tangent.cross(Vec3::Y).normalize_or_zero();
+            if right.length_squared() < 1e-6 {
+                continue;
+            }
+
+            let left_pos = point - right * road_width * 0.5;
+            let right_pos = point + right * road_width * 0.5;
+
+            if j > 0 {
+                let seg_len = (point - points[j - 1]).length();
+                accumulated_length += seg_len;
+            }
+
+            let u = accumulated_length;
+
+            positions.push([left_pos.x, left_pos.y, left_pos.z]);
+            normals.push([0.0, 1.0, 0.0]);
+            uvs.push([u, -0.5]);
+
+            positions.push([right_pos.x, right_pos.y, right_pos.z]);
+            normals.push([0.0, 1.0, 0.0]);
+            uvs.push([u, 0.5]);
+
+            let vertex_count = positions.len();
+            if vertex_count >= 6 {
+                let base = vertex_count as u32 - 6;
+                let a = base;
+                let b = base + 1;
+                let c = base + 2;
+                let d = base + 3;
+
+                indices.extend_from_slice(&[a, c, b, b, c, d]);
+            }
+        }
+    }
+
+    if positions.is_empty() {
+        return Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::default(),
+        );
+    }
+
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
+
+    mesh
+}
+
+fn update_road_mesh(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    paths: Query<(Entity, &BezierPath, &Children)>,
+    nodes: Query<(&BezierPathNode, &GlobalTransform)>,
+    road_mesh_query: Query<(Entity, &RoadMesh, &ChildOf, Option<&Mesh3d>), With<RoadMesh>>,
+) {
+    for (path_entity, path, children) in &paths {
+        let node_data: Vec<(Vec3, Vec3, Vec3)> = children
+            .iter()
+            .filter_map(|child| {
+                nodes
+                    .get(child)
+                    .ok()
+                    .map(|(node, tf)| (tf.translation(), node.incoming, node.outgoing))
+            })
+            .collect();
+
+        if node_data.len() < 2 {
+            continue;
+        }
+
+        let road_mesh_entity = road_mesh_query
+            .iter()
+            .find(|(_, _, child_of, _)| child_of.0 == path_entity);
+
+        if let Some((entity, road_mesh, _child_of, _existing_mesh)) = road_mesh_entity {
+            let mesh = build_road_mesh(
+                &node_data,
+                path.closed,
+                path.subdivisions,
+                road_mesh.road_width,
+            );
+
+            if mesh.count_vertices() == 0 {
+                continue;
+            }
+
+            let mesh_handle = meshes.add(mesh);
+            let material_handle = materials.add(StandardMaterial {
+                base_color: Color::srgb(0.2, 0.2, 0.2),
+                perceptual_roughness: 0.95,
+                metallic: 0.0,
+                ..default()
+            });
+
+            commands
+                .entity(entity)
+                .insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
