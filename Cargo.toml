@@ -1,0 +1,47 @@
+[package]
+name = "bevy-bezier-splines"
+version = "0.1.0"
+edition = "2021"
+description = "Bezier spline gizmos for Bevy, ported from Unity"
+license = "MIT"
+repository = "https://github.com/sunsided/bevy-bezier-splines"
+
+[[example]]
+name = "road_placement"
+path = "examples/road_placement.rs"
+
+[dependencies]
+bevy = { version = "0.18", default-features = false, features = [
+    "bevy_core_pipeline",
+    "bevy_render",
+    "bevy_gizmos",
+    "bevy_pbr",
+    "bevy_window",
+    "bevy_winit",
+    "bevy_asset",
+    "bevy_color",
+    "default_font",
+    "x11",
+] }
+
+[dev-dependencies]
+bevy = { version = "0.18", default-features = false, features = [
+    "bevy_core_pipeline",
+    "bevy_render",
+    "bevy_gizmos",
+    "bevy_pbr",
+    "bevy_window",
+    "bevy_winit",
+    "bevy_asset",
+    "bevy_color",
+    "bevy_text",
+    "bevy_ui",
+    "default_font",
+    "x11",
+] }
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
