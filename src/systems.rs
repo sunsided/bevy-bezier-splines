@@ -69,10 +69,8 @@ pub fn draw_bezier_spline_gizmos(
             let last = node_data.len() - 1;
 
             for (i, (center, incoming, outgoing)) in node_data.iter().enumerate() {
-                let xz_isometry = Isometry3d::new(
-                    *center,
-                    Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
-                );
+                let xz_isometry =
+                    Isometry3d::new(*center, Quat::from_rotation_x(std::f32::consts::FRAC_PI_2));
                 gizmos
                     .circle(xz_isometry, 0.15, Color::srgb(1.0, 1.0, 0.0))
                     .resolution(24);

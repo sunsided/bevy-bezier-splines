@@ -75,6 +75,14 @@ struct RoadMesh {
     road_width: f32,
 }
 
+/// Marker component for the boundary strip container entity.
+#[derive(Component)]
+struct RoadBoundaryStrips;
+
+/// Marker component for individual boundary strip segments.
+#[derive(Component)]
+struct RoadBoundaryStripSegment;
+
 /// Which part of a node is being interacted with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HandleKind {
@@ -129,6 +137,7 @@ fn setup_scene(
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.18, 0.28, 0.18),
             perceptual_roughness: 0.9,
+            unlit: true,
             ..default()
         })),
     ));
@@ -237,6 +246,13 @@ fn spawn_road(commands: &mut Commands, closed: bool, nodes: &[(Vec3, Vec3, Vec3)
         Visibility::default(),
         ChildOf(path_entity),
     ));
+
+    commands.spawn((
+        RoadBoundaryStrips,
+        Transform::default(),
+        Visibility::default(),
+        ChildOf(path_entity),
+    ));
 }
 
 fn status_text_content(closed: bool, draw_mode: GizmoDrawMode) -> String {
@@ -279,7 +295,7 @@ fn build_road_mesh(
         let points: Vec<Vec3> = sample_cubic_bezier(p0, p1, p2, p3, subdivisions).collect();
 
         for (j, point) in points.iter().enumerate() {
-            let tangent = if j == 0 {
+            let tangent_dir = if j == 0 {
                 if points.len() > 1 {
                     (points[1] - points[0]).normalize_or_zero()
                 } else {
@@ -291,7 +307,7 @@ fn build_road_mesh(
                 (points[j + 1] - points[j - 1]).normalize_or_zero()
             };
 
-            let right = tangent.cross(Vec3::Y).normalize_or_zero();
+            let right = tangent_dir.cross(Vec3::Y).normalize_or_zero();
             if right.length_squared() < 1e-6 {
                 continue;
             }
@@ -322,7 +338,7 @@ fn build_road_mesh(
                 let c = base + 2;
                 let d = base + 3;
 
-                indices.extend_from_slice(&[a, c, b, b, c, d]);
+                indices.extend_from_slice(&[a, b, c, b, d, c]);
             }
         }
     }
@@ -342,8 +358,131 @@ fn build_road_mesh(
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh.insert_indices(Indices::U32(indices));
+    let _ = mesh.generate_tangents();
 
     mesh
+}
+
+fn build_strip_segment_mesh(
+    inner_prev: Vec3,
+    outer_prev: Vec3,
+    inner_curr: Vec3,
+    outer_curr: Vec3,
+) -> Mesh {
+    let positions = vec![
+        [inner_prev.x, inner_prev.y, inner_prev.z],
+        [outer_prev.x, outer_prev.y, outer_prev.z],
+        [inner_curr.x, inner_curr.y, inner_curr.z],
+        [outer_curr.x, outer_curr.y, outer_curr.z],
+    ];
+    let normals = vec![[0.0, 1.0, 0.0]; 4];
+    let uvs = vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]];
+    let indices = Indices::U32(vec![0, 1, 3, 0, 3, 2]);
+
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(indices);
+    mesh
+}
+
+struct BoundaryStripSegment {
+    mesh: Mesh,
+    is_white: bool,
+}
+
+fn build_road_boundary_segments(
+    node_data: &[(Vec3, Vec3, Vec3)],
+    closed: bool,
+    subdivisions: u32,
+    road_width: f32,
+    strip_width: f32,
+    segment_length: f32,
+) -> Vec<BoundaryStripSegment> {
+    let segment_count = if closed {
+        node_data.len()
+    } else {
+        node_data.len() - 1
+    };
+
+    let mut segments: Vec<BoundaryStripSegment> = Vec::new();
+    let mut seg_acc = 0.0_f32;
+    let mut segment_index = 0;
+
+    let mut prev_left_inner: Option<Vec3> = None;
+    let mut prev_left_outer: Option<Vec3> = None;
+    let mut prev_right_inner: Option<Vec3> = None;
+    let mut prev_right_outer: Option<Vec3> = None;
+
+    for i in 0..segment_count {
+        let next = (i + 1) % node_data.len();
+        let (p0, _in0, out0) = node_data[i];
+        let (p3, in3, _out3) = node_data[next];
+        let p1 = p0 + out0;
+        let p2 = p3 + in3;
+
+        let points: Vec<Vec3> = sample_cubic_bezier(p0, p1, p2, p3, subdivisions).collect();
+
+        for (j, point) in points.iter().enumerate() {
+            let tangent = if j == 0 {
+                if points.len() > 1 {
+                    (points[1] - points[0]).normalize_or_zero()
+                } else {
+                    Vec3::Z
+                }
+            } else if j == points.len() - 1 {
+                (points[j] - points[j - 1]).normalize_or_zero()
+            } else {
+                (points[j + 1] - points[j - 1]).normalize_or_zero()
+            };
+
+            let right = tangent.cross(Vec3::Y).normalize_or_zero();
+            if right.length_squared() < 1e-6 {
+                continue;
+            }
+
+            let left_inner = point - right * road_width * 0.5;
+            let right_inner = point + right * road_width * 0.5;
+            let left_outer = left_inner - right * strip_width;
+            let right_outer = right_inner + right * strip_width;
+
+            if j > 0 {
+                seg_acc += (point - points[j - 1]).length();
+            }
+
+            if let (Some(lip), Some(lop), Some(rip), Some(rop)) = (
+                prev_left_inner,
+                prev_left_outer,
+                prev_right_inner,
+                prev_right_outer,
+            ) {
+                if seg_acc >= segment_length {
+                    let is_white = segment_index % 2 == 0;
+                    segments.push(BoundaryStripSegment {
+                        mesh: build_strip_segment_mesh(lip, lop, left_inner, left_outer),
+                        is_white,
+                    });
+                    segments.push(BoundaryStripSegment {
+                        mesh: build_strip_segment_mesh(rip, rop, right_inner, right_outer),
+                        is_white,
+                    });
+                    segment_index += 1;
+                    seg_acc = 0.0;
+                }
+            }
+
+            prev_left_inner = Some(left_inner);
+            prev_left_outer = Some(left_outer);
+            prev_right_inner = Some(right_inner);
+            prev_right_outer = Some(right_outer);
+        }
+    }
+
+    segments
 }
 
 fn update_road_mesh(
@@ -353,6 +492,8 @@ fn update_road_mesh(
     paths: Query<(Entity, &BezierPath, &Children)>,
     nodes: Query<(&BezierPathNode, &GlobalTransform)>,
     road_mesh_query: Query<(Entity, &RoadMesh, &ChildOf, Option<&Mesh3d>), With<RoadMesh>>,
+    boundary_strips_query: Query<(Entity, &RoadBoundaryStrips, &ChildOf), With<RoadBoundaryStrips>>,
+    strip_segment_query: Query<Entity, With<RoadBoundaryStripSegment>>,
 ) {
     for (path_entity, path, children) in &paths {
         let node_data: Vec<(Vec3, Vec3, Vec3)> = children
@@ -390,12 +531,74 @@ fn update_road_mesh(
                 base_color: Color::srgb(0.2, 0.2, 0.2),
                 perceptual_roughness: 0.95,
                 metallic: 0.0,
+                unlit: true,
                 ..default()
             });
 
             commands
                 .entity(entity)
                 .insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
+        }
+
+        // Update boundary strips
+        const STRIP_WIDTH: f32 = 0.15;
+        const STRIP_SEGMENT_LENGTH: f32 = 1.5;
+
+        let strips_entity = boundary_strips_query
+            .iter()
+            .find(|(_, _, child_of)| child_of.0 == path_entity)
+            .map(|(entity, _, _)| entity);
+
+        if let Some(strips_entity) = strips_entity {
+            // Despawn old strip segments
+            for child in children.iter() {
+                if strip_segment_query.get(child).is_ok() {
+                    commands.entity(child).despawn();
+                }
+            }
+
+            let road_width = road_mesh_query
+                .iter()
+                .find(|(_, _, child_of, _)| child_of.0 == path_entity)
+                .map(|(_, rm, _, _)| rm.road_width)
+                .unwrap_or(0.5);
+
+            let segments = build_road_boundary_segments(
+                &node_data,
+                path.closed,
+                path.subdivisions,
+                road_width,
+                STRIP_WIDTH,
+                STRIP_SEGMENT_LENGTH,
+            );
+
+            let white_material = materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                perceptual_roughness: 0.8,
+                unlit: true,
+                ..default()
+            });
+            let red_material = materials.add(StandardMaterial {
+                base_color: Color::srgb(0.8, 0.1, 0.1),
+                perceptual_roughness: 0.8,
+                unlit: true,
+                ..default()
+            });
+
+            for seg in segments {
+                let mesh_handle = meshes.add(seg.mesh);
+                let mat_handle = if seg.is_white {
+                    white_material.clone()
+                } else {
+                    red_material.clone()
+                };
+                commands.spawn((
+                    Mesh3d(mesh_handle),
+                    MeshMaterial3d(mat_handle),
+                    RoadBoundaryStripSegment,
+                    ChildOf(strips_entity),
+                ));
+            }
         }
     }
 }
