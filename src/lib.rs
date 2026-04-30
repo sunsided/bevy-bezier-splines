@@ -25,6 +25,6 @@ impl Plugin for BezierSplinesPlugin {
             .register_type::<BezierPathNode>()
             .register_type::<NodeType>()
             .register_type::<GizmoDrawMode>()
-            .add_systems(Update, systems::draw_bezier_spline_gizmos);
+            .add_systems(PostUpdate, systems::draw_bezier_spline_gizmos);
     }
 }
