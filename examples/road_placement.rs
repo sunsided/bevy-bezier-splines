@@ -140,6 +140,7 @@ fn setup_scene(
             unlit: true,
             ..default()
         })),
+        Transform::from_xyz(0.0, -0.01, 0.0),
     ));
 
     // Directional light
@@ -242,14 +243,14 @@ fn spawn_road(commands: &mut Commands, closed: bool, nodes: &[(Vec3, Vec3, Vec3)
 
     commands.spawn((
         RoadMesh { road_width: 0.5 },
-        Transform::default(),
+        Transform::from_xyz(0.0, 0.001, 0.0),
         Visibility::default(),
         ChildOf(path_entity),
     ));
 
     commands.spawn((
         RoadBoundaryStrips,
-        Transform::default(),
+        Transform::from_xyz(0.0, 0.002, 0.0),
         Visibility::default(),
         ChildOf(path_entity),
     ));
@@ -532,6 +533,7 @@ fn update_road_mesh(
                 perceptual_roughness: 0.95,
                 metallic: 0.0,
                 unlit: true,
+                depth_bias: -1.0,
                 ..default()
             });
 
@@ -576,12 +578,14 @@ fn update_road_mesh(
                 base_color: Color::WHITE,
                 perceptual_roughness: 0.8,
                 unlit: true,
+                depth_bias: -2.0,
                 ..default()
             });
             let red_material = materials.add(StandardMaterial {
                 base_color: Color::srgb(0.8, 0.1, 0.1),
                 perceptual_roughness: 0.8,
                 unlit: true,
+                depth_bias: -2.0,
                 ..default()
             });
 
