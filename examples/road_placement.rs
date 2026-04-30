@@ -11,6 +11,7 @@
 //! | Drag node center | Left-click on a gray cross, then move mouse |
 //! | Drag control handle | Left-click on a blue/red cross, then move mouse |
 //! | Toggle closed path | `C` |
+//! | Toggle gizmo draw mode | `G` |
 //! | Add waypoint at end | `A` |
 //! | Remove last waypoint | `R` |
 //! | Reset to default | `Space` |
@@ -150,8 +151,14 @@ fn setup_scene(
     ));
 
     // UI status text
+    let initial_closed = false;
+    let initial_draw_mode = GizmoDrawMode::Complete;
+    println!(
+        "Gizmo draw mode: {:?} (press G to cycle: Complete → SplineOnly → WaypointOnly → None)",
+        initial_draw_mode
+    );
     commands.spawn((
-        Text::new(status_text_content(false)),
+        Text::new(status_text_content(initial_closed, initial_draw_mode)),
         TextFont {
             font_size: 16.0,
             ..default()
@@ -202,7 +209,7 @@ fn spawn_road(commands: &mut Commands, closed: bool, nodes: &[(Vec3, Vec3, Vec3)
             BezierPath {
                 subdivisions: 30,
                 closed,
-                gizmo_draw_mode: GizmoDrawMode::WaypointOnly,
+                gizmo_draw_mode: GizmoDrawMode::Complete,
             },
             Transform::default(),
             Visibility::default(),
@@ -232,13 +239,14 @@ fn spawn_road(commands: &mut Commands, closed: bool, nodes: &[(Vec3, Vec3, Vec3)
     ));
 }
 
-fn status_text_content(closed: bool) -> String {
+fn status_text_content(closed: bool, draw_mode: GizmoDrawMode) -> String {
     format!(
         "Bevy Bezier Splines – Road Placement\n\
          Left-click & drag: move a node or control handle\n\
          Right-click drag: orbit  |  Scroll: zoom\n\
-         [A] Add  [R] Remove last  [C] Toggle closed ({})  [Space] Reset",
-        if closed { "ON" } else { "OFF" }
+         [A] Add  [R] Remove last  [C] Toggle closed ({})  [G] Gizmo mode ({:?})  [Space] Reset",
+        if closed { "ON" } else { "OFF" },
+        draw_mode
     )
 }
 
@@ -593,6 +601,16 @@ fn keyboard_controls(
         path.closed = !path.closed;
     }
 
+    if keys.just_pressed(KeyCode::KeyG) {
+        path.gizmo_draw_mode = match path.gizmo_draw_mode {
+            GizmoDrawMode::Complete => GizmoDrawMode::SplineOnly,
+            GizmoDrawMode::SplineOnly => GizmoDrawMode::WaypointOnly,
+            GizmoDrawMode::WaypointOnly => GizmoDrawMode::None,
+            GizmoDrawMode::None => GizmoDrawMode::Complete,
+        };
+        println!("Gizmo draw mode: {:?}", path.gizmo_draw_mode);
+    }
+
     if keys.just_pressed(KeyCode::KeyA) {
         let last_pos = children
             .iter()
@@ -653,8 +671,10 @@ fn update_status_text(
     paths: Query<&BezierPath>,
     mut text_query: Query<&mut Text, With<StatusText>>,
 ) {
-    let closed = paths.iter().next().map(|p| p.closed).unwrap_or(false);
+    let path = paths.iter().next();
+    let closed = path.map(|p| p.closed).unwrap_or(false);
+    let draw_mode = path.map(|p| p.gizmo_draw_mode).unwrap_or_default();
     if let Ok(mut text) = text_query.single_mut() {
-        **text = status_text_content(closed);
+        **text = status_text_content(closed, draw_mode);
     }
 }
