@@ -22,7 +22,9 @@ use bevy::{
     prelude::*,
     window::{PrimaryWindow, WindowResolution},
 };
-use bevy_bezier_splines::{BezierPath, BezierPathNode, BezierSplinesPlugin, GizmoDrawMode, NodeType};
+use bevy_bezier_splines::{
+    BezierPath, BezierPathNode, BezierSplinesPlugin, GizmoDrawMode, NodeType,
+};
 
 fn main() {
     App::new()
@@ -138,7 +140,10 @@ fn setup_scene(
     // UI status text
     commands.spawn((
         Text::new(status_text_content(false)),
-        TextFont { font_size: 16.0, ..default() },
+        TextFont {
+            font_size: 16.0,
+            ..default()
+        },
         TextColor(Color::WHITE),
         Node {
             position_type: PositionType::Absolute,
@@ -155,10 +160,26 @@ fn spawn_default_road(mut commands: Commands) {
         &mut commands,
         false,
         &[
-            (Vec3::new(-6.0, 0.0, 0.0), Vec3::new(0.0, 0.0, -1.5), Vec3::new(0.0, 0.0, 1.5)),
-            (Vec3::new(-2.0, 0.0, 3.0), Vec3::new(-1.5, 0.0, 0.0), Vec3::new(1.5, 0.0, 0.0)),
-            (Vec3::new(2.0, 0.0, -3.0), Vec3::new(-1.5, 0.0, 0.0), Vec3::new(1.5, 0.0, 0.0)),
-            (Vec3::new(6.0, 0.0, 0.0), Vec3::new(0.0, 0.0, -1.5), Vec3::new(0.0, 0.0, 1.5)),
+            (
+                Vec3::new(-6.0, 0.0, 0.0),
+                Vec3::new(0.0, 0.0, -1.5),
+                Vec3::new(0.0, 0.0, 1.5),
+            ),
+            (
+                Vec3::new(-2.0, 0.0, 3.0),
+                Vec3::new(-1.5, 0.0, 0.0),
+                Vec3::new(1.5, 0.0, 0.0),
+            ),
+            (
+                Vec3::new(2.0, 0.0, -3.0),
+                Vec3::new(-1.5, 0.0, 0.0),
+                Vec3::new(1.5, 0.0, 0.0),
+            ),
+            (
+                Vec3::new(6.0, 0.0, 0.0),
+                Vec3::new(0.0, 0.0, -1.5),
+                Vec3::new(0.0, 0.0, 1.5),
+            ),
         ],
     );
 }
@@ -181,7 +202,11 @@ fn spawn_road(commands: &mut Commands, closed: bool, nodes: &[(Vec3, Vec3, Vec3)
     for &(center, incoming, outgoing) in nodes {
         let node_entity = commands
             .spawn((
-                BezierPathNode { incoming, outgoing, node_type: NodeType::Connected },
+                BezierPathNode {
+                    incoming,
+                    outgoing,
+                    node_type: NodeType::Connected,
+                },
                 Transform::from_translation(center),
                 Visibility::default(),
             ))
@@ -303,8 +328,12 @@ fn pick_handle(
 
     let mut best: Option<(f32, Entity, HandleKind, f32)> = None;
     for (entity, kind, world_pos) in &handles {
-        let Some(ndc) = camera.world_to_ndc(cam_tf, *world_pos) else { continue };
-        if ndc.z < 0.0 || ndc.z > 1.0 { continue; }
+        let Some(ndc) = camera.world_to_ndc(cam_tf, *world_pos) else {
+            continue;
+        };
+        if ndc.z < 0.0 || ndc.z > 1.0 {
+            continue;
+        }
 
         let vp = camera
             .logical_viewport_size()
@@ -338,14 +367,22 @@ fn drag_handle(
     if !mouse_button.pressed(MouseButton::Left) {
         return;
     }
-    let Some((entity, kind)) = interaction.dragging else { return };
+    let Some((entity, kind)) = interaction.dragging else {
+        return;
+    };
 
     let window = windows.single().unwrap();
     let (camera, cam_tf) = camera_query.single().unwrap();
-    let Some(ray) = cursor_ray(window, cam_tf, camera) else { return };
-    let Some(world_pos) = ray_plane_y(&ray, interaction.drag_plane_y) else { return };
+    let Some(ray) = cursor_ray(window, cam_tf, camera) else {
+        return;
+    };
+    let Some(world_pos) = ray_plane_y(&ray, interaction.drag_plane_y) else {
+        return;
+    };
 
-    let Ok((mut node, mut tf)) = nodes.get_mut(entity) else { return };
+    let Ok((mut node, mut tf)) = nodes.get_mut(entity) else {
+        return;
+    };
 
     match kind {
         HandleKind::Center => {
@@ -381,7 +418,9 @@ fn keyboard_controls(
     mut paths: Query<(Entity, &mut BezierPath, &Children)>,
     nodes: Query<(&BezierPathNode, &GlobalTransform)>,
 ) {
-    let Ok((path_entity, mut path, children)) = paths.single_mut() else { return };
+    let Ok((path_entity, mut path, children)) = paths.single_mut() else {
+        return;
+    };
 
     if keys.just_pressed(KeyCode::KeyC) {
         path.closed = !path.closed;
@@ -418,10 +457,26 @@ fn keyboard_controls(
             &mut commands,
             false,
             &[
-                (Vec3::new(-6.0, 0.0, 0.0), Vec3::new(0.0, 0.0, -1.5), Vec3::new(0.0, 0.0, 1.5)),
-                (Vec3::new(-2.0, 0.0, 3.0), Vec3::new(-1.5, 0.0, 0.0), Vec3::new(1.5, 0.0, 0.0)),
-                (Vec3::new(2.0, 0.0, -3.0), Vec3::new(-1.5, 0.0, 0.0), Vec3::new(1.5, 0.0, 0.0)),
-                (Vec3::new(6.0, 0.0, 0.0), Vec3::new(0.0, 0.0, -1.5), Vec3::new(0.0, 0.0, 1.5)),
+                (
+                    Vec3::new(-6.0, 0.0, 0.0),
+                    Vec3::new(0.0, 0.0, -1.5),
+                    Vec3::new(0.0, 0.0, 1.5),
+                ),
+                (
+                    Vec3::new(-2.0, 0.0, 3.0),
+                    Vec3::new(-1.5, 0.0, 0.0),
+                    Vec3::new(1.5, 0.0, 0.0),
+                ),
+                (
+                    Vec3::new(2.0, 0.0, -3.0),
+                    Vec3::new(-1.5, 0.0, 0.0),
+                    Vec3::new(1.5, 0.0, 0.0),
+                ),
+                (
+                    Vec3::new(6.0, 0.0, 0.0),
+                    Vec3::new(0.0, 0.0, -1.5),
+                    Vec3::new(0.0, 0.0, 1.5),
+                ),
             ],
         );
     }

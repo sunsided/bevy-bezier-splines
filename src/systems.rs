@@ -23,9 +23,10 @@ pub fn draw_bezier_spline_gizmos(
         let node_data: Vec<(Vec3, Vec3, Vec3)> = children
             .iter()
             .filter_map(|child| {
-                nodes.get(child).ok().map(|(node, tf)| {
-                    (tf.translation(), node.incoming, node.outgoing)
-                })
+                nodes
+                    .get(child)
+                    .ok()
+                    .map(|(node, tf)| (tf.translation(), node.incoming, node.outgoing))
             })
             .collect();
 
