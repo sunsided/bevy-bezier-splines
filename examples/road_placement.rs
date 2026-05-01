@@ -495,6 +495,7 @@ fn update_road_mesh(
     road_mesh_query: Query<(Entity, &RoadMesh, &ChildOf, Option<&Mesh3d>), With<RoadMesh>>,
     boundary_strips_query: Query<(Entity, &RoadBoundaryStrips, &ChildOf), With<RoadBoundaryStrips>>,
     strip_segment_query: Query<Entity, With<RoadBoundaryStripSegment>>,
+    strips_children_query: Query<&Children>,
 ) {
     for (path_entity, path, children) in &paths {
         let node_data: Vec<(Vec3, Vec3, Vec3)> = children
@@ -544,7 +545,7 @@ fn update_road_mesh(
 
         // Update boundary strips
         const STRIP_WIDTH: f32 = 0.15;
-        const STRIP_SEGMENT_LENGTH: f32 = 1.5;
+        const STRIP_SEGMENT_LENGTH: f32 = 0.3;
 
         let strips_entity = boundary_strips_query
             .iter()
@@ -553,9 +554,11 @@ fn update_road_mesh(
 
         if let Some(strips_entity) = strips_entity {
             // Despawn old strip segments
-            for child in children.iter() {
-                if strip_segment_query.get(child).is_ok() {
-                    commands.entity(child).despawn();
+            if let Ok(strips_children) = strips_children_query.get(strips_entity) {
+                for child in strips_children.iter() {
+                    if strip_segment_query.get(child).is_ok() {
+                        commands.entity(child).despawn();
+                    }
                 }
             }
 
