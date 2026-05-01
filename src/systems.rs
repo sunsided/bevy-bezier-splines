@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use crate::{
     components::{BezierPath, BezierPathNode, GizmoDrawMode},
-    interaction::{collect_axis_handles, AxisHandleConfig},
+    interaction::{AxisHandleConfig, DragAxis},
     math::sample_cubic_bezier,
 };
 
@@ -111,8 +111,24 @@ pub fn draw_axis_handle_gizmos(
     paths: Query<(&BezierPath, &Children)>,
     nodes: Query<(&BezierPathNode, &GlobalTransform)>,
 ) {
-    let handles = collect_axis_handles(&nodes, &paths, config.arrow_length);
-    for pick in &handles {
-        gizmos.arrow(pick.anchor, pick.tip, pick.axis.color());
+    for (path, children) in &paths {
+        let draw_handles = matches!(
+            path.gizmo_draw_mode,
+            GizmoDrawMode::Complete | GizmoDrawMode::WaypointOnly
+        );
+        if !draw_handles {
+            continue;
+        }
+        for child in children.iter() {
+            let Ok((node, tf)) = nodes.get(child) else { continue };
+            let center = tf.translation();
+            let points = [center, center + node.incoming, center + node.outgoing];
+            for point in points {
+                for axis in [DragAxis::X, DragAxis::Y, DragAxis::Z] {
+                    let dir = axis.unit();
+                    gizmos.arrow(point, point + dir * config.arrow_length, axis.color());
+                }
+            }
+        }
     }
 }
