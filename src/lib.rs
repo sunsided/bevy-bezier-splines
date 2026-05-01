@@ -9,10 +9,16 @@
 //! [`BezierPath`] and child entities carrying [`BezierPathNode`] components.
 
 pub mod components;
+pub mod interaction;
 pub mod math;
 pub mod systems;
 
 pub use components::{BezierPath, BezierPathNode, GizmoDrawMode, NodeType};
+pub use interaction::{
+    collect_axis_handles, ray_axis_closest_s, AxisDrag, AxisHandleConfig, AxisHandleDragState,
+    AxisHandleGrabbed, AxisHandleInteractionPlugin, AxisHandlePick, AxisHandleReleased, DragAxis,
+    HandleKind,
+};
 
 use bevy::prelude::*;
 
@@ -25,6 +31,10 @@ impl Plugin for BezierSplinesPlugin {
             .register_type::<BezierPathNode>()
             .register_type::<NodeType>()
             .register_type::<GizmoDrawMode>()
-            .add_systems(PostUpdate, systems::draw_bezier_spline_gizmos);
+            .add_systems(PostUpdate, systems::draw_bezier_spline_gizmos)
+            .add_systems(
+                PostUpdate,
+                systems::draw_axis_handle_gizmos.after(systems::draw_bezier_spline_gizmos),
+            );
     }
 }

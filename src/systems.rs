@@ -5,6 +5,7 @@ use bevy::prelude::*;
 
 use crate::{
     components::{BezierPath, BezierPathNode, GizmoDrawMode},
+    interaction::{collect_axis_handles, AxisHandleConfig},
     math::sample_cubic_bezier,
 };
 
@@ -104,5 +105,19 @@ pub fn draw_bezier_spline_gizmos(
                 );
             }
         }
+    }
+}
+
+/// Draws axis-handle arrows (red=X, green=Y, blue=Z) at every node center and
+/// control-handle tip. Runs in `PostUpdate` after [`draw_bezier_spline_gizmos`].
+pub fn draw_axis_handle_gizmos(
+    mut gizmos: Gizmos,
+    config: Res<AxisHandleConfig>,
+    paths: Query<(&BezierPath, &Children)>,
+    nodes: Query<(&BezierPathNode, &GlobalTransform)>,
+) {
+    let handles = collect_axis_handles(&nodes, &paths, config.arrow_length);
+    for pick in &handles {
+        gizmos.arrow(pick.anchor, pick.tip, pick.axis.color());
     }
 }

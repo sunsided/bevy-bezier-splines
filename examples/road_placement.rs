@@ -8,8 +8,7 @@
 //!
 //! | Action | Input |
 //! |--------|-------|
-//! | Drag node center | Left-click on a gray cross, then move mouse |
-//! | Drag control handle | Left-click on a blue/red cross, then move mouse |
+//! | Drag node center or handle along axis | Left-click on a red/green/blue arrow, then move mouse |
 //! | Toggle closed path | `C` |
 //! | Toggle gizmo draw mode | `G` |
 //! | Add waypoint at end | `A` |
@@ -24,11 +23,11 @@ use bevy::{
     mesh::Indices,
     prelude::*,
     render::render_resource::PrimitiveTopology,
-    window::{PrimaryWindow, WindowResolution},
+    window::WindowResolution,
 };
 use bevy_bezier_splines::{
-    math::sample_cubic_bezier, BezierPath, BezierPathNode, BezierSplinesPlugin, GizmoDrawMode,
-    NodeType,
+    math::sample_cubic_bezier, AxisHandleDragState, AxisHandleInteractionPlugin, BezierPath,
+    BezierPathNode, BezierSplinesPlugin, GizmoDrawMode, NodeType,
 };
 
 fn main() {
@@ -42,16 +41,13 @@ fn main() {
             ..default()
         }))
         .add_plugins(BezierSplinesPlugin)
-        .init_resource::<InteractionState>()
+        .add_plugins(AxisHandleInteractionPlugin)
         .init_resource::<CameraState>()
         .add_systems(Startup, (setup_scene, spawn_default_road))
         .add_systems(
             Update,
             (
                 update_camera_orbit,
-                pick_handle,
-                drag_handle,
-                release_handle,
                 keyboard_controls,
                 update_status_text,
                 update_road_mesh,
@@ -82,21 +78,6 @@ struct RoadBoundaryStrips;
 /// Marker component for individual boundary strip segments.
 #[derive(Component)]
 struct RoadBoundaryStripSegment;
-
-/// Which part of a node is being interacted with.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum HandleKind {
-    Center,
-    Incoming,
-    Outgoing,
-}
-
-/// Which node + handle is currently being dragged, plus the Y plane used.
-#[derive(Resource, Default)]
-struct InteractionState {
-    dragging: Option<(Entity, HandleKind)>,
-    drag_plane_y: f32,
-}
 
 /// Camera orbit state.
 #[derive(Resource)]
@@ -259,7 +240,7 @@ fn spawn_road(commands: &mut Commands, closed: bool, nodes: &[(Vec3, Vec3, Vec3)
 fn status_text_content(closed: bool, draw_mode: GizmoDrawMode) -> String {
     format!(
         "Bevy Bezier Splines – Road Placement\n\
-         Left-click & drag: move a node or control handle\n\
+         Left-click & drag red/green/blue arrows to move along X/Y/Z\n\
          Right-click drag: orbit  |  Scroll: zoom\n\
          [A] Add  [R] Remove last  [C] Toggle closed ({})  [G] Gizmo mode ({:?})  [Space] Reset",
         if closed { "ON" } else { "OFF" },
@@ -285,6 +266,7 @@ fn build_road_mesh(
     let mut indices: Vec<u32> = Vec::new();
 
     let mut accumulated_length = 0.0_f32;
+    let mut prev_right: Option<Vec3> = None;
 
     for i in 0..segment_count {
         let next = (i + 1) % node_data.len();
@@ -309,9 +291,12 @@ fn build_road_mesh(
             };
 
             let right = tangent_dir.cross(Vec3::Y).normalize_or_zero();
-            if right.length_squared() < 1e-6 {
-                continue;
-            }
+            let right = if right.length_squared() < 1e-6 {
+                prev_right.unwrap_or(Vec3::X)
+            } else {
+                prev_right = Some(right);
+                right
+            };
 
             let left_pos = point - right * road_width * 0.5;
             let right_pos = point + right * road_width * 0.5;
@@ -627,10 +612,10 @@ fn update_camera_orbit(
     mouse_button: Res<ButtonInput<MouseButton>>,
     mouse_motion: Res<AccumulatedMouseMotion>,
     scroll: Res<AccumulatedMouseScroll>,
-    interaction: Res<InteractionState>,
+    drag_state: Res<AxisHandleDragState>,
 ) {
     // Orbit with right-click drag – only when not dragging a spline handle.
-    if mouse_button.pressed(MouseButton::Right) && interaction.dragging.is_none() {
+    if mouse_button.pressed(MouseButton::Right) && drag_state.dragging.is_none() {
         camera_state.orbiting = true;
         camera_state.yaw -= mouse_motion.delta.x * 0.005;
         camera_state.pitch = (camera_state.pitch + mouse_motion.delta.y * 0.005)
@@ -649,147 +634,6 @@ fn update_camera_orbit(
     let pos = orbit_position(&camera_state);
     if let Ok(mut tf) = camera_query.single_mut() {
         *tf = Transform::from_translation(pos).looking_at(camera_state.focus, Vec3::Y);
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Handle picking and dragging
-// ---------------------------------------------------------------------------
-
-/// Cast a ray from the camera through the cursor position.
-fn cursor_ray(window: &Window, camera_tf: &GlobalTransform, camera: &Camera) -> Option<Ray3d> {
-    let cursor = window.cursor_position()?;
-    camera.viewport_to_world(camera_tf, cursor).ok()
-}
-
-/// Intersect a ray with the horizontal plane at height `y`.
-fn ray_plane_y(ray: &Ray3d, y: f32) -> Option<Vec3> {
-    let denom = ray.direction.y;
-    if denom.abs() < 1e-6 {
-        return None;
-    }
-    let t = (y - ray.origin.y) / denom;
-    if t < 0.0 {
-        return None;
-    }
-    Some(ray.origin + *ray.direction * t)
-}
-
-/// Collect all pick targets (center + both handles) for every node in every path.
-fn collect_handles(
-    nodes: &Query<(&BezierPathNode, &GlobalTransform)>,
-    paths: &Query<(&BezierPath, &Children)>,
-) -> Vec<(Entity, HandleKind, Vec3)> {
-    let mut targets = Vec::new();
-    for (_path, children) in paths.iter() {
-        for child in children.iter() {
-            if let Ok((node, tf)) = nodes.get(child) {
-                let center = tf.translation();
-                targets.push((child, HandleKind::Center, center));
-                targets.push((child, HandleKind::Incoming, center + node.incoming));
-                targets.push((child, HandleKind::Outgoing, center + node.outgoing));
-            }
-        }
-    }
-    targets
-}
-
-fn pick_handle(
-    mut interaction: ResMut<InteractionState>,
-    mouse_button: Res<ButtonInput<MouseButton>>,
-    windows: Query<&Window, With<PrimaryWindow>>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-    nodes: Query<(&BezierPathNode, &GlobalTransform)>,
-    paths: Query<(&BezierPath, &Children)>,
-) {
-    if !mouse_button.just_pressed(MouseButton::Left) || interaction.dragging.is_some() {
-        return;
-    }
-
-    let window = windows.single().unwrap();
-    let (camera, cam_tf) = camera_query.single().unwrap();
-
-    let handles = collect_handles(&nodes, &paths);
-
-    let mut best: Option<(f32, Entity, HandleKind, f32)> = None;
-    for (entity, kind, world_pos) in &handles {
-        let Some(ndc) = camera.world_to_ndc(cam_tf, *world_pos) else {
-            continue;
-        };
-        if ndc.z < 0.0 || ndc.z > 1.0 {
-            continue;
-        }
-
-        let vp = camera
-            .logical_viewport_size()
-            .unwrap_or(Vec2::new(window.width(), window.height()));
-        let screen = Vec2::new(
-            (ndc.x * 0.5 + 0.5) * vp.x,
-            (1.0 - (ndc.y * 0.5 + 0.5)) * vp.y,
-        );
-        let cursor_pos = window.cursor_position().unwrap_or_default();
-        let dist = (screen - cursor_pos).length();
-
-        const PICK_RADIUS_PX: f32 = 18.0;
-        if dist < PICK_RADIUS_PX && (best.is_none() || dist < best.unwrap().0) {
-            best = Some((dist, *entity, *kind, world_pos.y));
-        }
-    }
-
-    if let Some((_, entity, kind, plane_y)) = best {
-        interaction.dragging = Some((entity, kind));
-        interaction.drag_plane_y = plane_y;
-    }
-}
-
-fn drag_handle(
-    interaction: Res<InteractionState>,
-    mouse_button: Res<ButtonInput<MouseButton>>,
-    windows: Query<&Window, With<PrimaryWindow>>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
-    mut nodes: Query<(&mut BezierPathNode, &mut Transform)>,
-) {
-    if !mouse_button.pressed(MouseButton::Left) {
-        return;
-    }
-    let Some((entity, kind)) = interaction.dragging else {
-        return;
-    };
-
-    let window = windows.single().unwrap();
-    let (camera, cam_tf) = camera_query.single().unwrap();
-    let Some(ray) = cursor_ray(window, cam_tf, camera) else {
-        return;
-    };
-    let Some(world_pos) = ray_plane_y(&ray, interaction.drag_plane_y) else {
-        return;
-    };
-
-    let Ok((mut node, mut tf)) = nodes.get_mut(entity) else {
-        return;
-    };
-
-    match kind {
-        HandleKind::Center => {
-            tf.translation = Vec3::new(world_pos.x, interaction.drag_plane_y, world_pos.z);
-        }
-        HandleKind::Incoming => {
-            node.incoming = world_pos - tf.translation;
-            node.update_from_incoming();
-        }
-        HandleKind::Outgoing => {
-            node.outgoing = world_pos - tf.translation;
-            node.update_from_outgoing();
-        }
-    }
-}
-
-fn release_handle(
-    mut interaction: ResMut<InteractionState>,
-    mouse_button: Res<ButtonInput<MouseButton>>,
-) {
-    if mouse_button.just_released(MouseButton::Left) {
-        interaction.dragging = None;
     }
 }
 
