@@ -67,19 +67,14 @@ pub fn draw_bezier_spline_gizmos(
         }
 
         if draw_supports {
-            let last = node_data.len() - 1;
-
-            for (i, (center, incoming, outgoing)) in node_data.iter().enumerate() {
+            for (_i, (center, incoming, outgoing)) in node_data.iter().enumerate() {
                 let xz_isometry =
                     Isometry3d::new(*center, Quat::from_rotation_x(std::f32::consts::FRAC_PI_2));
                 gizmos
                     .circle(xz_isometry, 0.15, Color::srgb(1.0, 1.0, 0.0))
                     .resolution(24);
 
-                let draw_incoming = i > 0 || path.closed;
-                let draw_outgoing = i < last || path.closed;
-
-                if draw_incoming && *incoming != Vec3::ZERO {
+                if *incoming != Vec3::ZERO {
                     let ctrl = center + incoming;
                     gizmos.line(*center, ctrl, Color::srgb(0.2, 0.6, 1.0));
                     gizmos
@@ -87,7 +82,7 @@ pub fn draw_bezier_spline_gizmos(
                         .resolution(16);
                 }
 
-                if draw_outgoing && *outgoing != Vec3::ZERO {
+                if *outgoing != Vec3::ZERO {
                     let ctrl = center + outgoing;
                     gizmos.line(*center, ctrl, Color::srgb(1.0, 0.5, 0.2));
                     gizmos
