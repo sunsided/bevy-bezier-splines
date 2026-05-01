@@ -3,8 +3,11 @@ name = "bevy-bezier-splines"
 version = "0.1.0"
 edition = "2021"
 description = "Bezier spline gizmos for Bevy, ported from Unity"
-license = "MIT"
+license = "EUPL-1.2"
 repository = "https://github.com/sunsided/bevy-bezier-splines"
+authors = ["Markus Mayer <widemeadows@gmail.com>"]
+keywords = ["bevy", "bezier", "splines", "gizmos", "curves"]
+categories = ["game-development", "graphics", "rendering"]
 
 [[example]]
 name = "road_placement"
