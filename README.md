@@ -3,6 +3,10 @@
 A Bevy implementation of cubic Bezier spline gizmos, ported from the
 [unity-bezier-splines](https://github.com/sunsided/unity-bezier-splines) Unity project.
 
+<div align="center">
+  <img src=".readme/road.png" alt="road placement screenshot" />
+</div>
+
 ## Features
 
 - **`BezierPath`** – component that defines a spline; child entities with
