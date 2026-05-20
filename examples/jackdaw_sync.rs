@@ -21,7 +21,11 @@ fn main() {
 
 fn setup(mut commands: Commands) {
     let path = commands
-        .spawn((BezierPath::default(), Transform::default(), JackdawSplineSync))
+        .spawn((
+            BezierPath::default(),
+            Transform::default(),
+            JackdawSplineSync,
+        ))
         .id();
 
     let a = commands

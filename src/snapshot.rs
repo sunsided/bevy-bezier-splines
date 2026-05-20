@@ -148,8 +148,16 @@ mod tests {
             ..default()
         };
         let nodes = vec![
-            (Vec3::new(0.0, 0.0, 0.0), Vec3::ZERO, Vec3::new(1.0, 0.0, 0.0)),
-            (Vec3::new(2.0, 0.0, 0.0), Vec3::new(-1.0, 0.0, 0.0), Vec3::ZERO),
+            (
+                Vec3::new(0.0, 0.0, 0.0),
+                Vec3::ZERO,
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (
+                Vec3::new(2.0, 0.0, 0.0),
+                Vec3::new(-1.0, 0.0, 0.0),
+                Vec3::ZERO,
+            ),
         ];
 
         let snapshot = build_snapshot_from_node_data(&path, &nodes).unwrap();
@@ -177,7 +185,11 @@ mod tests {
         let path = BezierPath::default();
         let nodes = vec![
             (Vec3::ZERO, node.incoming, node.outgoing),
-            (Vec3::new(2.0, 0.0, 0.0), Vec3::new(-1.0, 0.0, 0.0), Vec3::ZERO),
+            (
+                Vec3::new(2.0, 0.0, 0.0),
+                Vec3::new(-1.0, 0.0, 0.0),
+                Vec3::ZERO,
+            ),
         ];
         assert!(build_snapshot_from_node_data(&path, &nodes).is_some());
     }

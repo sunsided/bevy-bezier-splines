@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-use crate::{BezierPath, BezierPathNode, BezierSplineSnapshot, collect_snapshot};
+use crate::{collect_snapshot, BezierPath, BezierPathNode, BezierSplineSnapshot};
 
 /// Marks spline entities that should publish Jackdaw-facing snapshots.
 #[derive(Debug, Default, Component, Reflect)]
@@ -39,7 +39,10 @@ impl Plugin for JackdawSplineIntegrationPlugin {
         app.register_type::<JackdawSplineSync>()
             .init_resource::<JackdawSplineRegistry>()
             .add_message::<JackdawSplineChanged>()
-            .add_systems(Update, (sync_jackdaw_spline_snapshots, cleanup_removed_sync_markers));
+            .add_systems(
+                Update,
+                (sync_jackdaw_spline_snapshots, cleanup_removed_sync_markers),
+            );
     }
 }
 
@@ -58,8 +61,10 @@ fn sync_jackdaw_spline_snapshots(
                 .unwrap_or(false)
         });
 
-        let needs_sync =
-            path.is_changed() || children.is_changed() || has_changed_node || !registry.snapshots.contains_key(&entity);
+        let needs_sync = path.is_changed()
+            || children.is_changed()
+            || has_changed_node
+            || !registry.snapshots.contains_key(&entity);
         if !needs_sync {
             continue;
         }
@@ -103,7 +108,11 @@ mod tests {
     fn setup_path(app: &mut App) -> Entity {
         let path = app
             .world_mut()
-            .spawn((BezierPath::default(), Transform::default(), JackdawSplineSync))
+            .spawn((
+                BezierPath::default(),
+                Transform::default(),
+                JackdawSplineSync,
+            ))
             .id();
 
         let n0 = app
@@ -138,7 +147,9 @@ mod tests {
         let registry = app.world().resource::<JackdawSplineRegistry>();
         assert!(registry.snapshots.contains_key(&path));
 
-        let messages = app.world_mut().resource_mut::<Messages<JackdawSplineChanged>>();
+        let messages = app
+            .world_mut()
+            .resource_mut::<Messages<JackdawSplineChanged>>();
         assert!(!messages.is_empty());
     }
 
@@ -151,7 +162,9 @@ mod tests {
         let path = setup_path(&mut app);
         app.update();
 
-        app.world_mut().entity_mut(path).remove::<JackdawSplineSync>();
+        app.world_mut()
+            .entity_mut(path)
+            .remove::<JackdawSplineSync>();
         app.update();
 
         let registry = app.world().resource::<JackdawSplineRegistry>();
