@@ -65,6 +65,10 @@ Enable the feature:
 bevy-bezier-splines = { version = "0.1", features = ["jackdaw"] }
 ```
 
+> Note: this feature enables only the adapter surface in this crate.
+> It intentionally does **not** add a dependency on the `jackdaw` editor crate;
+> add Jackdaw crates to your project as needed.
+
 Then add the integration plugin and mark path entities you want exported:
 
 ```rust

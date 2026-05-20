@@ -20,6 +20,9 @@ required-features = ["jackdaw"]
 
 [features]
 default = []
+# Gates the Jackdaw-facing adapter API/systems in this crate.
+# This feature intentionally does not pull the `jackdaw` editor crate.
+# Consumers add `jackdaw` (or `jackdaw_api` / `jackdaw_runtime`) separately as needed.
 jackdaw = []
 
 [dependencies]
