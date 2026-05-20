@@ -15,6 +15,10 @@ A Bevy implementation of cubic Bezier spline gizmos, ported from the
   and three node types: `Connected`, `Symmetric`, `Broken`.
 - **`GizmoDrawMode`** – choose `Complete`, `SplineOnly`, `WaypointOnly`, or `None`.
 - **`BezierSplinesPlugin`** – add to your app to enable automatic gizmo rendering.
+- **`snapshot` API** – convert ECS spline data into stable cubic-segment snapshots
+  for external tools.
+- **`jackdaw` feature** – optional one-way sync adapter that publishes spline
+  snapshots to Jackdaw-facing resources/messages.
 - **`road_placement` example** – interactive demo: drag nodes and handles to
   reshape a road, add/remove waypoints, toggle a closed loop.
 
@@ -52,6 +56,44 @@ fn setup(mut commands: Commands) {
     }
 }
 ```
+
+## Jackdaw integration (optional)
+
+Enable the feature:
+
+```toml
+bevy-bezier-splines = { version = "0.1", features = ["jackdaw"] }
+```
+
+Then add the integration plugin and mark path entities you want exported:
+
+```rust
+use bevy::prelude::*;
+use bevy_bezier_splines::{
+    BezierPath, BezierSplinesPlugin,
+    JackdawSplineIntegrationPlugin, JackdawSplineSync,
+};
+
+fn main() {
+    App::new()
+        .add_plugins(DefaultPlugins)
+        .add_plugins(BezierSplinesPlugin)
+        .add_plugins(JackdawSplineIntegrationPlugin)
+        .add_systems(Startup, |mut commands: Commands| {
+            commands.spawn((BezierPath::default(), JackdawSplineSync));
+        })
+        .run();
+}
+```
+
+### Compatibility and assumptions
+
+- `bevy-bezier-splines` and `jackdaw` currently target Bevy `0.18`.
+- Spline node ordering follows Bevy `Children` order.
+- Handles are interpreted as local offsets from each node center.
+- Sync strategy is **one-way** (`BezierPath` / `BezierPathNode` -> snapshot).
+- Updates are emitted only when path/components changed (Bevy change detection).
+- Paths with fewer than two valid nodes are treated as absent snapshots.
 
 ## Running the example
 

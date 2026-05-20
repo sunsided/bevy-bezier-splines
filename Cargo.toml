@@ -13,6 +13,15 @@ categories = ["game-development", "graphics", "rendering"]
 name = "road_placement"
 path = "examples/road_placement.rs"
 
+[[example]]
+name = "jackdaw_sync"
+path = "examples/jackdaw_sync.rs"
+required-features = ["jackdaw"]
+
+[features]
+default = []
+jackdaw = []
+
 [dependencies]
 bevy = "0.18"
 
