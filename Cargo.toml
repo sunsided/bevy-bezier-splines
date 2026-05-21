@@ -13,6 +13,18 @@ categories = ["game-development", "graphics", "rendering"]
 name = "road_placement"
 path = "examples/road_placement.rs"
 
+[[example]]
+name = "jackdaw_sync"
+path = "examples/jackdaw_sync.rs"
+required-features = ["jackdaw"]
+
+[features]
+default = []
+# Gates the Jackdaw-facing adapter API/systems in this crate.
+# This feature intentionally does not pull the `jackdaw` editor crate.
+# Consumers add `jackdaw` (or `jackdaw_api` / `jackdaw_runtime`) separately as needed.
+jackdaw = []
+
 [dependencies]
 bevy = "0.18"
 
